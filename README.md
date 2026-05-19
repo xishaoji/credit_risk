@@ -7,9 +7,15 @@
 本项目实现了完整的机器学习流程：
 
 - 数据加载与探索性分析 (EDA)
+- 数据质量检查（缺失值、异常值、重复值检测）
 - 特征工程与数据预处理
+- 超参数调优（Optuna贝叶斯优化）
 - 多模型训练与对比（Logistic Regression / Random Forest / XGBoost / LightGBM）
 - 模型评估与可视化
+- SHAP模型解释性分析
+- 日志系统
+- 单元测试
+- FastAPI模型部署
 
 ## 数据集
 
@@ -26,13 +32,23 @@ credit_risk/
 ├── data/                    # 数据目录
 ├── models/                  # 训练好的模型
 ├── outputs/                 # 可视化图表
+├── logs/                    # 日志文件
+├── tests/                   # 单元测试
+│   ├── test_data_generator.py
+│   ├── test_feature_engineering.py
+│   └── test_model_training.py
 ├── src/
 │   ├── data_generator.py    # 合成数据生成
 │   ├── data_loader.py       # Kaggle数据加载
+│   ├── data_quality.py      # 数据质量检查
 │   ├── eda.py               # 探索性数据分析
 │   ├── feature_engineering.py # 特征工程
+│   ├── hyperparameter_tuning.py # 超参数调优
+│   ├── logger.py            # 日志系统
 │   ├── model_training.py    # 模型训练
+│   ├── shap_analysis.py     # SHAP模型解释
 │   └── evaluation.py        # 模型评估
+├── app.py                   # FastAPI部署服务
 ├── main.py                  # 主入口
 └── requirements.txt         # 依赖
 ```
@@ -55,6 +71,20 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### 4. 运行单元测试
+
+```bash
+pytest tests/ -v
+```
+
+### 5. 启动API服务
+
+```bash
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
+```
+
+API文档: http://localhost:8000/docs
+
 ## 模型效果
 
 | 模型 | 准确率 | F1 (违约类) | AUC |
@@ -76,9 +106,13 @@ python main.py
 - Python 3.11
 - scikit-learn
 - XGBoost / LightGBM
+- Optuna (超参数优化)
+- SHAP (模型解释)
+- FastAPI (API部署)
 - pandas / numpy
 - matplotlib / seaborn
 - imbalanced-learn (SMOTE)
+- pytest (单元测试)
 
 ## License
 
