@@ -1,42 +1,40 @@
 """FastAPI模型部署服务"""
 import os
-import pickle
-import pandas as pd
+import logging
 import numpy as np
+import pandas as pd
+import joblib
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-from typing import List, Optional
-import logging
+from typing import List
 
-# 日志配置
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Credit Risk Prediction API",
     description="银行信用风险评估预测API",
-    version="1.0.0"
+    version="2.0.0"
 )
 
-# 模型路径
 MODEL_DIR = "models"
 DEFAULT_MODEL = "xgboost"
 
 
 class CreditFeatures(BaseModel):
-    """信用风险特征"""
+    """Kaggle Give Me Some Credit 数据集特征"""
+    信用额度使用率: float = Field(..., description="信用额度使用率 (0~1)")
     年龄: int = Field(..., ge=18, le=100, description="年龄")
-    收入: int = Field(..., ge=0, description="月收入")
-    工作年限: int = Field(..., ge=0, le=50, description="工作年限")
-    学历: str = Field(..., description="学历: 高中/大专/本科/硕士/博士")
-    婚姻状况: str = Field(..., description="婚姻状况: 单身/已婚/离异")
-    贷款金额: int = Field(..., ge=0, description="贷款金额")
-    贷款期限_月: int = Field(..., ge=1, le=60, description="贷款期限(月)")
-    利率: float = Field(..., ge=0, le=100, description="利率(%)")
-    信用评分: int = Field(..., ge=300, le=850, description="信用评分")
-    历史违约次数: int = Field(..., ge=0, description="历史违约次数")
-    信用卡数量: int = Field(..., ge=0, description="信用卡数量")
-    是否有房产: int = Field(..., ge=0, le=1, description="是否有房产(0/1)")
+    逾期30_59天次数: int = Field(..., alias="逾期30-59天次数", ge=0, description="逾期30-59天次数")
+    负债比率: float = Field(..., ge=0, description="负债比率")
+    月收入: float = Field(..., ge=0, description="月收入")
+    信用账户数: int = Field(..., ge=0, description="信用账户数")
+    房贷数量: int = Field(..., ge=0, description="房地产贷款数量")
+    逾期90天以上次数: int = Field(..., ge=0, description="逾期90天以上次数")
+    逾期60_89天次数: int = Field(..., alias="逾期60-89天次数", ge=0, description="逾期60-89天次数")
+    家属人数: int = Field(..., ge=0, description="家属人数")
+
+    model_config = {"populate_by_name": True}
 
 
 class PredictionResponse(BaseModel):
@@ -61,8 +59,9 @@ class BatchPredictionResponse(BaseModel):
     default_rate: float
 
 
-# 加载模型
+# 缓存
 loaded_models = {}
+loaded_preprocessor = None
 
 
 def load_model(model_name: str):
@@ -71,24 +70,53 @@ def load_model(model_name: str):
         model_path = os.path.join(MODEL_DIR, f"{model_name}.pkl")
         if not os.path.exists(model_path):
             raise HTTPException(status_code=404, detail=f"模型 {model_name} 不存在")
-        with open(model_path, 'rb') as f:
-            loaded_models[model_name] = pickle.load(f)
+        loaded_models[model_name] = joblib.load(model_path)
         logger.info(f"已加载模型: {model_name}")
     return loaded_models[model_name]
 
 
-def preprocess_features(features: CreditFeatures) -> pd.DataFrame:
-    """预处理特征"""
-    data = features.model_dump()
+def load_preprocessor():
+    """加载预处理器（scaler + encoder）"""
+    global loaded_preprocessor
+    if loaded_preprocessor is None:
+        from src.feature_engineering import load_preprocessor as _load
+        loaded_preprocessor = _load(MODEL_DIR)
+        logger.info("已加载预处理器")
+    return loaded_preprocessor
+
+
+def preprocess_features(features: CreditFeatures, preprocessor) -> pd.DataFrame:
+    """使用训练时的预处理器转换特征"""
+    data = features.model_dump(by_alias=True)
     df = pd.DataFrame([data])
 
-    # 类别变量编码（与训练时一致）
-    education_map = {'高中': 0, '大专': 1, '本科': 2, '硕士': 3, '博士': 4}
-    marital_map = {'单身': 0, '已婚': 1, '离异': 2}
+    # 使用训练时的encoder处理类别变量
+    encoders = preprocessor['encoders']
+    for col, le in encoders.items():
+        if col in df.columns:
+            # 处理未见过的类别
+            df[col] = df[col].map(lambda x: x if x in le.classes_ else le.classes_[0])
+            df[col] = le.transform(df[col])
 
-    df['学历'] = education_map.get(features.学历, 2)
-    df['婚姻状况'] = marital_map.get(features.婚姻状况, 1)
+    # 使用训练时的scaler标准化数值特征
+    scaler = preprocessor['scaler']
+    feature_columns = preprocessor['feature_columns']
 
+    # 特征构造（与训练时一致）
+    cols = set(df.columns)
+    if '月收入' in cols and '负债比率' in cols:
+        df['月负债比'] = df['负债比率'] / (df['月收入'] + 1)
+    if '信用额度使用率' in cols and '负债比率' in cols:
+        df['信用风险综合'] = df['信用额度使用率'] * df['负债比率']
+    if '逾期30-59天次数' in cols and '逾期90天以上次数' in cols:
+        df['总逾期次数'] = df['逾期30-59天次数'] + df['逾期90天以上次数']
+
+    # 标准化
+    num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    df[num_cols] = scaler.transform(df[num_cols])
+
+    # 确保列顺序与训练时一致
+    df = df[feature_columns]
     return df
 
 
@@ -109,7 +137,7 @@ async def root():
     """API根路径"""
     return {
         "message": "Credit Risk Prediction API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "docs": "/docs"
     }
 
@@ -120,7 +148,7 @@ async def list_models():
     available_models = []
     if os.path.exists(MODEL_DIR):
         for f in os.listdir(MODEL_DIR):
-            if f.endswith('.pkl'):
+            if f.endswith('.pkl') and f != 'preprocessor.pkl':
                 available_models.append(f.replace('.pkl', ''))
     return {"models": available_models}
 
@@ -130,7 +158,8 @@ async def predict(features: CreditFeatures, model_name: str = DEFAULT_MODEL):
     """单个预测"""
     try:
         model = load_model(model_name)
-        df = preprocess_features(features)
+        preprocessor = load_preprocessor()
+        df = preprocess_features(features, preprocessor)
 
         prediction = model.predict(df)[0]
         probability = model.predict_proba(df)[0][1]
@@ -142,6 +171,8 @@ async def predict(features: CreditFeatures, model_name: str = DEFAULT_MODEL):
             risk_level=get_risk_level(probability),
             features_used=list(df.columns)
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"预测失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"预测失败: {str(e)}")
@@ -152,19 +183,30 @@ async def predict_batch(request: BatchPredictionRequest, model_name: str = DEFAU
     """批量预测"""
     try:
         model = load_model(model_name)
-        predictions = []
+        preprocessor = load_preprocessor()
 
+        # 批量构建DataFrame后一次性预测
+        all_data = [inst.model_dump() for inst in request.instances]
+        df = pd.DataFrame(all_data)
+
+        # 逐样本预处理（因为有特征构造逻辑）
+        dfs = []
         for features in request.instances:
-            df = preprocess_features(features)
-            prediction = model.predict(df)[0]
-            probability = model.predict_proba(df)[0][1]
+            row_df = preprocess_features(features, preprocessor)
+            dfs.append(row_df)
+        df_batch = pd.concat(dfs, ignore_index=True)
 
+        predictions_raw = model.predict(df_batch)
+        probabilities_raw = model.predict_proba(df_batch)[:, 1]
+
+        predictions = []
+        for pred, prob in zip(predictions_raw, probabilities_raw):
             predictions.append(PredictionResponse(
                 model_name=model_name,
-                default_probability=round(float(probability), 4),
-                is_default=bool(prediction),
-                risk_level=get_risk_level(probability),
-                features_used=list(df.columns)
+                default_probability=round(float(prob), 4),
+                is_default=bool(pred),
+                risk_level=get_risk_level(prob),
+                features_used=list(df_batch.columns)
             ))
 
         default_count = sum(1 for p in predictions if p.is_default)
@@ -175,6 +217,8 @@ async def predict_batch(request: BatchPredictionRequest, model_name: str = DEFAU
             default_count=default_count,
             default_rate=round(default_count / len(predictions), 4) if predictions else 0
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"批量预测失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"批量预测失败: {str(e)}")

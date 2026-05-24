@@ -6,6 +6,9 @@ data/*.zip
 models/*.pkl
 models/*.joblib
 
+# Outputs (generated artifacts)
+outputs/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -34,5 +37,5 @@ env/
 Thumbs.db
 desktop.ini
 
-# Outputs (optional, remove if you want to include charts)
-# outputs/
+# Logs
+logs/

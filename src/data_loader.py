@@ -1,5 +1,8 @@
 import os
+import logging
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def load_give_me_some_credit(data_dir='data'):
@@ -12,17 +15,17 @@ def load_give_me_some_credit(data_dir='data'):
     file_path = os.path.join(data_dir, 'cs-training.csv')
 
     if not os.path.exists(file_path):
-        print("=" * 60)
-        print("数据集未找到！")
-        print("=" * 60)
-        print(f"请按以下步骤操作:")
-        print(f"1. 访问 https://www.kaggle.com/c/GiveMeSomeCredit/data")
-        print(f"2. 下载 cs-training.csv 文件")
-        print(f"3. 将文件放到 {os.path.abspath(data_dir)}/ 目录下")
-        print(f"4. 重新运行程序")
+        logger.warning("=" * 60)
+        logger.warning("数据集未找到！")
+        logger.warning("=" * 60)
+        logger.warning("请按以下步骤操作:")
+        logger.warning("1. 访问 https://www.kaggle.com/c/GiveMeSomeCredit/data")
+        logger.warning("2. 下载 cs-training.csv 文件")
+        logger.warning(f"3. 将文件放到 {os.path.abspath(data_dir)}/ 目录下")
+        logger.warning("4. 重新运行程序")
         return None
 
-    print(f"加载数据集: {file_path}")
+    logger.info(f"加载数据集: {file_path}")
     df = pd.read_csv(file_path, index_col=0)
 
     # 重命名列（中文）
@@ -41,9 +44,9 @@ def load_give_me_some_credit(data_dir='data'):
     }
     df = df.rename(columns=column_mapping)
 
-    print(f"数据形状: {df.shape}")
-    print(f"违约率: {df['是否违约'].mean():.2%}")
-    print(f"缺失值:\n{df.isnull().sum()}")
+    logger.info(f"数据形状: {df.shape}")
+    logger.info(f"违约率: {df['是否违约'].mean():.2%}")
+    logger.info(f"缺失值:\n{df.isnull().sum()}")
 
     return df
 
@@ -58,24 +61,24 @@ def load_home_credit(data_dir='data'):
     file_path = os.path.join(data_dir, 'application_train.csv')
 
     if not os.path.exists(file_path):
-        print("=" * 60)
-        print("数据集未找到！")
-        print("=" * 60)
-        print(f"请按以下步骤操作:")
-        print(f"1. 访问 https://www.kaggle.com/c/home-credit-default-risk/data")
-        print(f"2. 下载 application_train.csv 文件")
-        print(f"3. 将文件放到 {os.path.abspath(data_dir)}/ 目录下")
-        print(f"4. 重新运行程序")
+        logger.warning("=" * 60)
+        logger.warning("数据集未找到！")
+        logger.warning("=" * 60)
+        logger.warning("请按以下步骤操作:")
+        logger.warning("1. 访问 https://www.kaggle.com/c/home-credit-default-risk/data")
+        logger.warning("2. 下载 application_train.csv 文件")
+        logger.warning(f"3. 将文件放到 {os.path.abspath(data_dir)}/ 目录下")
+        logger.warning("4. 重新运行程序")
         return None
 
-    print(f"加载数据集: {file_path}")
+    logger.info(f"加载数据集: {file_path}")
     df = pd.read_csv(file_path)
 
     # 重命名目标列
     df = df.rename(columns={'TARGET': '是否违约'})
 
-    print(f"数据形状: {df.shape}")
-    print(f"违约率: {df['是否违约'].mean():.2%}")
+    logger.info(f"数据形状: {df.shape}")
+    logger.info(f"违约率: {df['是否违约'].mean():.2%}")
 
     return df
 

@@ -1,8 +1,11 @@
 import os
-import pandas as pd
+import logging
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+logger = logging.getLogger(__name__)
 
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
@@ -13,13 +16,13 @@ def run_eda(df, output_dir='outputs'):
     os.makedirs(output_dir, exist_ok=True)
 
     # 1. 数据概览
-    print("=" * 60)
-    print("数据概览")
-    print("=" * 60)
-    print(f"数据形状: {df.shape}")
-    print(f"\n数据类型:\n{df.dtypes}")
-    print(f"\n缺失值统计:\n{df.isnull().sum()}")
-    print(f"\n基本统计:\n{df.describe()}")
+    logger.info("=" * 60)
+    logger.info("数据概览")
+    logger.info("=" * 60)
+    logger.info(f"数据形状: {df.shape}")
+    logger.info(f"\n数据类型:\n{df.dtypes}")
+    logger.info(f"\n缺失值统计:\n{df.isnull().sum()}")
+    logger.info(f"\n基本统计:\n{df.describe()}")
 
     # 2. 目标变量分布
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
@@ -91,4 +94,4 @@ def run_eda(df, output_dir='outputs'):
     plt.savefig(os.path.join(output_dir, 'feature_vs_target.png'), dpi=150)
     plt.close()
 
-    print(f"\nEDA图表已保存到 {output_dir}/ 目录")
+    logger.info(f"\nEDA图表已保存到 {output_dir}/ 目录")

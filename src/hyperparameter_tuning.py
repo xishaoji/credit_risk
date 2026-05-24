@@ -1,9 +1,9 @@
 """超参数调优模块 - 使用Optuna进行贝叶斯优化"""
+import logging
 import optuna
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def objective_xgboost(trial, X, y):
         'reg_lambda': trial.suggest_float('reg_lambda', 0, 10),
     }
 
-    model = XGBClassifier(**params, random_state=42, use_label_encoder=False, eval_metric='logloss')
+    model = XGBClassifier(**params, random_state=42, eval_metric='logloss')
 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     scores = cross_val_score(model, X, y, cv=cv, scoring='roc_auc', n_jobs=-1)
@@ -53,45 +53,38 @@ def objective_lightgbm(trial, X, y):
 
 
 def tune_xgboost(X, y, n_trials=50):
-    """调优XGBoost超参数"""
-    logger.info("开始XGBoost超参数调优...")
+    """调优XGBoost超参数，返回最佳参数"""
+    logger.info(f"开始XGBoost超参数调优 (trials={n_trials})...")
 
     study = optuna.create_study(direction='maximize', study_name='xgboost_tuning')
-    study.optimize(lambda trial: objective_xgboost(trial, X, y), n_trials=n_trials, show_progress_bar=True)
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    study.optimize(lambda trial: objective_xgboost(trial, X, y), n_trials=n_trials)
 
-    logger.info(f"最佳AUC: {study.best_value:.4f}")
-    logger.info(f"最佳参数: {study.best_params}")
+    logger.info(f"XGBoost 最佳AUC: {study.best_value:.4f}")
+    logger.info(f"XGBoost 最佳参数: {study.best_params}")
 
     return study.best_params
 
 
 def tune_lightgbm(X, y, n_trials=50):
-    """调优LightGBM超参数"""
-    logger.info("开始LightGBM超参数调优...")
+    """调优LightGBM超参数，返回最佳参数"""
+    logger.info(f"开始LightGBM超参数调优 (trials={n_trials})...")
 
     study = optuna.create_study(direction='maximize', study_name='lightgbm_tuning')
-    study.optimize(lambda trial: objective_lightgbm(trial, X, y), n_trials=n_trials, show_progress_bar=True)
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    study.optimize(lambda trial: objective_lightgbm(trial, X, y), n_trials=n_trials)
 
-    logger.info(f"最佳AUC: {study.best_value:.4f}")
-    logger.info(f"最佳参数: {study.best_params}")
+    logger.info(f"LightGBM 最佳AUC: {study.best_value:.4f}")
+    logger.info(f"LightGBM 最佳参数: {study.best_params}")
 
     return study.best_params
 
 
-if __name__ == '__main__':
-    import pandas as pd
-    from sklearn.model_selection import train_test_split
-
-    df = pd.read_csv('data/credit_data.csv')
-    X = df.drop('是否违约', axis=1)
-    y = df['是否违约']
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-
-    print("调优XGBoost...")
-    xgb_params = tune_xgboost(X_train, y_train, n_trials=30)
-    print(f"XGBoost最佳参数: {xgb_params}")
-
-    print("\n调优LightGBM...")
-    lgbm_params = tune_lightgbm(X_train, y_train, n_trials=30)
-    print(f"LightGBM最佳参数: {lgbm_params}")
+def tune_all_models(X_train, y_train, n_trials=50):
+    """调优所有支持的模型，返回最佳参数字典"""
+    xgb_params = tune_xgboost(X_train, y_train, n_trials=n_trials)
+    lgbm_params = tune_lightgbm(X_train, y_train, n_trials=n_trials)
+    return {
+        'XGBoost': xgb_params,
+        'LightGBM': lgbm_params
+    }

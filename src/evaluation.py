@@ -1,4 +1,5 @@
 import os
+import logging
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -6,6 +7,8 @@ from sklearn.metrics import (
     confusion_matrix, classification_report, roc_curve, auc,
     precision_recall_curve, average_precision_score
 )
+
+logger = logging.getLogger(__name__)
 
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
@@ -63,13 +66,14 @@ def evaluate_models(results, feature_names, output_dir='outputs'):
     plt.close()
 
     # 分类报告
-    print("\n" + "=" * 60)
-    print("模型评估报告")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info("模型评估报告")
+    logger.info("=" * 60)
     for name, res in results.items():
-        print(f"\n--- {name} ---")
-        print(classification_report(res['y_test'], res['y_pred'],
-                                    target_names=['未违约', '违约']))
+        logger.info(f"\n--- {name} ---")
+        report = classification_report(res['y_test'], res['y_pred'],
+                                       target_names=['未违约', '违约'])
+        logger.info(report)
 
     # 特征重要性（树模型）
     tree_models = {k: v for k, v in results.items()
@@ -92,21 +96,24 @@ def evaluate_models(results, feature_names, output_dir='outputs'):
         plt.close()
 
     # 模型对比表
-    print("\n" + "=" * 60)
-    print("模型对比")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info("模型对比")
+    logger.info("=" * 60)
     from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
+    import pandas as pd
     comparison = []
     for name, res in results.items():
-        comparison.append({
+        row = {
             '模型': name,
             '准确率': accuracy_score(res['y_test'], res['y_pred']),
             'F1分数': f1_score(res['y_test'], res['y_pred']),
-            'AUC': roc_auc_score(res['y_test'], res['y_prob'])
-        })
-    import pandas as pd
+            'AUC': roc_auc_score(res['y_test'], res['y_prob']),
+        }
+        if 'cv_auc_mean' in res:
+            row['CV AUC'] = f"{res['cv_auc_mean']:.4f}±{res['cv_auc_std']:.4f}"
+        comparison.append(row)
     df_comp = pd.DataFrame(comparison)
-    print(df_comp.to_string(index=False))
+    logger.info(f"\n{df_comp.to_string(index=False)}")
 
-    print(f"\n评估图表已保存到 {output_dir}/ 目录")
+    logger.info(f"\n评估图表已保存到 {output_dir}/ 目录")
     return df_comp
